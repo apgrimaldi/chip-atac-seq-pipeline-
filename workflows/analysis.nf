@@ -1,21 +1,20 @@
+include { FASTQC }                from '../modules/local/fastqc.nf'
+include { TRIMGALORE }            from '../modules/local/trimgalore.nf'
+include { BOWTIE2 }               from '../modules/local/bowtie2.nf'
+include { SAMTOOLS_SORT }         from '../modules/local/samtools_sort.nf'
+include { SAMTOOLS_STATS }        from '../modules/local/samtools_stats.nf'
+include { PICARD_MARKDUPLICATES } from '../modules/local/picard_markduplicates.nf'
+include { FILTERING }             from '../modules/local/filtering.nf'
+include { MACS3_ATAC_NARROW }     from '../modules/local/macs3_atac_narrow.nf'
+include { MACS3_ATAC_BROAD }      from '../modules/local/macs3_atac_broad.nf'
+include { MACS3_CHIP_NARROW }     from '../modules/local/macs3_chip_narrow.nf'
+include { MACS3_CHIP_BROAD }      from '../modules/local/macs3_chip_broad.nf'
+include { HOMER_ANNOTATEPEAKS }   from '../modules/local/homer_annotate.nf'
+include { CALC_FRIP }             from '../modules/local/calc_frip.nf'
+include { DEEPTOOLS }             from '../modules/local/deeptools.nf'
+include { MULTIQC }               from '../modules/local/multiqc.nf'
 
-include { FASTQC }                 from '../modules/local/fastqc.nf'
-include { TRIMGALORE }             from '../modules/local/trimgalore.nf'
-include { BOWTIE2 }                from '../modules/local/bowtie2.nf'
-include { SAMTOOLS_SORT }          from '../modules/local/samtools_sort.nf'
-include { SAMTOOLS_STATS }         from '../modules/local/samtools_stats.nf' 
-include { PICARD_MARKDUPLICATES }  from '../modules/local/picard_markduplicates.nf'
-include { FILTERING }              from '../modules/local/filtering.nf'
-include { MACS3_ATAC_NARROW }      from '../modules/local/macs3_atac_narrow.nf'
-include { MACS3_ATAC_BROAD }       from '../modules/local/macs3_atac_broad.nf'
-include { MACS3_CHIP_NARROW }      from '../modules/local/macs3_chip_narrow.nf'
-include { MACS3_CHIP_BROAD }       from '../modules/local/macs3_chip_broad.nf'
-include { HOMER_ANNOTATEPEAKS }    from '../modules/local/homer_annotate.nf'
-include { CALC_FRIP }              from '../modules/local/calc_frip.nf'      
-include { DEEPTOOLS }              from '../modules/local/deeptools.nf'      
-include { MULTIQC }                from '../modules/local/multiqc.nf'        
 
-// --- Definizione del Workflow Principale ---
 workflow ATAC_CHIP_PIPELINE {
     take:
     ch_input    // [meta, [reads]]
