@@ -42,55 +42,66 @@ workflow ATAC_CHIP_PIPELINE {
     PICARD_MARKDUPLICATES ( SAMTOOLS_SORT.out.bam, [], [] )
     ch_versions = ch_versions.mix(PICARD_MARKDUPLICATES.out.versions)
 
-    // 6. Filtraggio
-    def blacklist_path = params.genomes[ params.genome ]?.blacklist ?: null
-    if (blacklist_path) {
-        ch_blacklist = file(blacklist_path) 
+   // --- 6. Filtraggio ---
+    def blacklist_val = params.genomes[ params.genome ]?.blacklist ?: null
+    if (blacklist_val) {
+        // file() scarica automaticamente se è un link
+        ch_blacklist = file(blacklist_val) 
+        
+        // Passiamo la terna a FILTERING
         FILTERING ( PICARD_MARKDUPLICATES.out.bam, ch_blacklist )
-        ch_final_bams = FILTERING.out.bam
+        
+        // IMPORTANTE: FILTERING emette solo [meta, bam]. 
+        // Dobbiamo aggiungere un null o un dummy per il BAI se i processi dopo lo richiedono,
+        // oppure gestire i canali a 2 elementi da qui in poi.
+        ch_final_bams = FILTERING.out.bam.map { meta, bam -> [ meta, bam, [] ] }
         ch_versions = ch_versions.mix(FILTERING.out.versions)
     } else {
         ch_final_bams = PICARD_MARKDUPLICATES.out.bam
     }
 
-    // 7. Statistiche Allineamento
-    SAMTOOLS_STATS ( ch_final_bams )
+    // --- 7. Statistiche Allineamento ---
+    // Usiamo it[0], it[1] per sicurezza universale
+    SAMTOOLS_STATS ( ch_final_bams.map { it -> [ it[0], it[1] ] } )
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
-    // 8. DeepTools (BigWig)
+    // --- 8. DeepTools (BigWig) ---
+    // Passiamo BAM e BAI separatamente come richiesto dal modulo
     DEEPTOOLS ( 
-        ch_final_bams.map { meta, bam, bai -> [ meta, bam ] },
-        ch_final_bams.map { meta, bam, bai -> bai }
+        ch_final_bams.map { it -> [ it[0], it[1] ] },
+        ch_final_bams.map { it -> it[2] } 
     )
 
-   // 9. Peak Calling
+    // --- 9. Peak Calling ---
     ch_peaks = Channel.empty()
     ch_frip_peaks = Channel.empty() 
 
     if (params.protocol == 'atac') {
-        // Usiamo .map { it.flatten() } per essere sicuri di non avere liste annidate
-        ch_macs_input = ch_final_bams.map { it instanceof List ? it.flatten() : it }
+        // Pulizia canali per MACS3 (vuole solo meta e bam)
+        ch_macs_input = ch_final_bams.map { it -> [ it[0], it[1] ] }
         
-        MACS3_ATAC_NARROW ( ch_macs_input.map { [ it[0], it[1] ] } )
-        MACS3_ATAC_BROAD  ( ch_macs_input.map { [ it[0], it[1] ] } )
+        MACS3_ATAC_NARROW ( ch_macs_input )
+        MACS3_ATAC_BROAD  ( ch_macs_input )
         
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
         ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
     } 
     else if (params.protocol == 'chip') {
-        // Appiattiamo il canale per evitare il doppio nesting [[meta, bam]]
-        ch_cleaned_bams = ch_final_bams.map { it.flatten() }
+        // Logica per ChIP-seq con controllo Input/IgG
+        ch_control_bams = ch_final_bams
+            .filter { it -> 
+                def m = it[0]
+                m.antibody == 'none' || !m.antibody || m.antibody == 'IgG' || m.antibody == '' 
+            }
+            .map { it -> [ it[0].id, it[1] ] }
 
-        // 1. Controlli
-        ch_control_bams = ch_cleaned_bams
-            .filter { it[0].antibody == 'none' || !it[0].antibody || it[0].antibody == 'IgG' || it[0].antibody == '' }
-            .map { [ it[0].id, it[1] ] }
-
-        // 2. IP
-        ch_macs3_chip_input = ch_cleaned_bams
-            .filter { it[0].antibody && it[0].antibody != 'none' && it[0].antibody != 'IgG' && it[0].antibody != '' }
-            .map { [ it[0].control, it[0], it[1] ] } 
+        ch_macs3_chip_input = ch_final_bams
+            .filter { it -> 
+                def m = it[0]
+                m.antibody && m.antibody != 'none' && m.antibody != 'IgG' && m.antibody != '' 
+            }
+            .map { it -> [ it[0].control, it[0], it[1] ] } 
             .join(ch_control_bams)
             .map { id_ctrl, meta, bam_ip, bam_ctrl -> [ meta, bam_ip, bam_ctrl ] }
 
@@ -102,13 +113,13 @@ workflow ATAC_CHIP_PIPELINE {
         ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions, MACS3_CHIP_BROAD.out.versions)
     }
 
-    // 10. FRiP (Sincronizzazione canali)
+    // --- 10. FRiP ---
+    // Join tra BAM (2 elementi) e PEAKS (2 elementi)
     ch_frip_input = ch_final_bams
-        .map { meta, bam, bai -> [meta, bam] }
+        .map { it -> [ it[0], it[1] ] }
         .join(ch_frip_peaks)
     
     CALC_FRIP ( ch_frip_input )
-
     // 11. Annotazione
     def fasta = params.genomes[ params.genome ]?.fasta ?: null
     def gtf   = params.genomes[ params.genome ]?.gtf   ?: null
