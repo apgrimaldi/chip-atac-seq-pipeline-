@@ -59,13 +59,13 @@ workflow ATAC_CHIP_PIPELINE {
     // 8. DeepTools (BigWig)
 
 DEEPTOOLS (
-    ch_final_filter_bam.map { meta, bam, bai -> bam }, 
-    ch_final_filter_bam.map { meta, bam, bai -> bai } 
-)
+        ch_final_bams.map { meta, bam, bai -> bam }, 
+        ch_final_bams.map { meta, bam, bai -> bai } 
+    )
 
     // 9. Peak Calling
     ch_peaks = Channel.empty()
-    ch_frip_peaks = Channel.empty() 
+  
 
     if (params.protocol == 'atac') {
         MACS3_ATAC_NARROW ( ch_final_bams )
@@ -127,15 +127,15 @@ DEEPTOOLS (
         BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),
         PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),
         SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),
-        ch_peaks.map{ it[1] }.collect().ifEmpty([]),            // Logs di MACS3
+        ch_peaks.map{ it[1] }.collect().ifEmpty([]),            
         CALC_FRIP.out.summary.map{ it[1] }.collect().ifEmpty([]),
-        ch_versions.unique().collect().ifEmpty([])             // Versioni software
+        ch_versions.unique().collect().ifEmpty([])
     )
 
     emit:
     bam      = ch_final_bams
     peaks    = ch_peaks
-    bigwig   = DEEPTOOLS_BAMCOVERAGE.out.bw
+    bigwig   = DEEPTOOLS.out.bw
     multiqc  = MULTIQC.out.report
     versions = ch_versions
 }
