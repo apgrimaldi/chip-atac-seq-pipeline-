@@ -73,10 +73,11 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
     // 8. DeepTools (Generazione BigWig)
-    // Passiamo BAM e BAI come file separati
+    def genes_bed = params.genomes[ params.genome ]?.genes_bed ? file(params.genomes[ params.genome ].genes_bed) : []
+
     DEEPTOOLS ( 
-        ch_final_bams.map { it -> [ it[0], it[1] ] },
-        ch_final_bams.map { it -> it[2] } 
+        ch_final_bams, // Passiamo direttamente la terna [meta, bam, bai]
+        genes_bed
     )
 
     // 9. Peak Calling
@@ -87,7 +88,6 @@ workflow ATAC_CHIP_PIPELINE {
         ch_macs_input = ch_final_bams.map { it -> [ it[0], it[1] ] }
         MACS3_ATAC_NARROW ( ch_macs_input )
         MACS3_ATAC_BROAD  ( ch_macs_input )
-        
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
         ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
@@ -111,7 +111,6 @@ workflow ATAC_CHIP_PIPELINE {
 
         MACS3_CHIP_NARROW ( ch_macs3_chip_input )
         MACS3_CHIP_BROAD  ( ch_macs3_chip_input )
-        
         ch_peaks = MACS3_CHIP_NARROW.out.peaks.mix(MACS3_CHIP_BROAD.out.peaks)
         ch_frip_peaks = MACS3_CHIP_NARROW.out.peaks
         ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions, MACS3_CHIP_BROAD.out.versions)
@@ -131,19 +130,16 @@ workflow ATAC_CHIP_PIPELINE {
     }
 
     // 12. MULTIQC
-    def summary_info = "Protocol: ${params.protocol.toUpperCase()}\nGenome: ${params.genome}"
-    def ch_workflow_summary = Channel.value(summary_info).collectFile(name: 'workflow_summary_mqc.txt')
-
     MULTIQC (
-        ch_multiqc_config.collect().ifEmpty([]),        // 1
-        ch_workflow_summary.collect().ifEmpty([]),      // 2
-        FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]), // 3
-        TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]), // 4
-        BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]), // 5
-        PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]), // 6
-        SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]), // 7
-        DEEPTOOLS.out.bw.map{ it[1] }.collect().ifEmpty([]), // 8 (Prendiamo solo il file .bw)
-        ch_peaks.map{ it[1] }.collect().ifEmpty([]),    // 9
-        ch_versions.unique().collect().ifEmpty([])      // 10
+        ch_multiqc_config.collect().ifEmpty([]),
+        Channel.value("Protocol: ${params.protocol}\nGenome: ${params.genome}").collectFile(name: 'summary.txt'),
+        FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]),
+        TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]),
+        BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),
+        PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),
+        SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),
+        DEEPTOOLS.out.bw.collect().ifEmpty([]), 
+        ch_peaks.map{ it[1] }.collect().ifEmpty([]),
+        ch_versions.unique().collect().ifEmpty([])
     )
 }
