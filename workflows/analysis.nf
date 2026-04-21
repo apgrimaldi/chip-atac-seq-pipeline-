@@ -68,31 +68,29 @@ workflow ATAC_CHIP_PIPELINE {
     ch_frip_peaks = Channel.empty() 
 
     if (params.protocol == 'atac') {
-        // Qui usiamo solo meta e bam, ignorando il resto
-        MACS3_ATAC_NARROW ( ch_final_bams.map { it -> [ it[0], it[1] ] } )
-        MACS3_ATAC_BROAD  ( ch_final_bams.map { it -> [ it[0], it[1] ] } )
+        // Usiamo .map { it.flatten() } per essere sicuri di non avere liste annidate
+        ch_macs_input = ch_final_bams.map { it instanceof List ? it.flatten() : it }
+        
+        MACS3_ATAC_NARROW ( ch_macs_input.map { [ it[0], it[1] ] } )
+        MACS3_ATAC_BROAD  ( ch_macs_input.map { [ it[0], it[1] ] } )
         
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
         ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
     } 
     else if (params.protocol == 'chip') {
-        // 1. Identifichiamo i controlli (Input o IgG)
-        // Usiamo 'it' per evitare errori di spacchettamento
-        ch_control_bams = ch_final_bams
-            .filter { it -> 
-                def meta = it[0]
-                meta.antibody == 'none' || !meta.antibody || meta.antibody == 'IgG' || meta.antibody == '' 
-            }
-            .map { it -> [ it[0].id, it[1] ] } // [id_controllo, bam_controllo]
+        // Appiattiamo il canale per evitare il doppio nesting [[meta, bam]]
+        ch_cleaned_bams = ch_final_bams.map { it.flatten() }
 
-        // 2. Prepariamo gli IP e facciamo il join
-        ch_macs3_chip_input = ch_final_bams
-            .filter { it -> 
-                def meta = it[0]
-                meta.antibody && meta.antibody != 'none' && meta.antibody != 'IgG' && meta.antibody != '' 
-            }
-            .map { it -> [ it[0].control, it[0], it[1] ] } // [id_controllo, meta_ip, bam_ip]
+        // 1. Controlli
+        ch_control_bams = ch_cleaned_bams
+            .filter { it[0].antibody == 'none' || !it[0].antibody || it[0].antibody == 'IgG' || it[0].antibody == '' }
+            .map { [ it[0].id, it[1] ] }
+
+        // 2. IP
+        ch_macs3_chip_input = ch_cleaned_bams
+            .filter { it[0].antibody && it[0].antibody != 'none' && it[0].antibody != 'IgG' && it[0].antibody != '' }
+            .map { [ it[0].control, it[0], it[1] ] } 
             .join(ch_control_bams)
             .map { id_ctrl, meta, bam_ip, bam_ctrl -> [ meta, bam_ip, bam_ctrl ] }
 
