@@ -57,7 +57,11 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
     // 8. DeepTools (BigWig)
-    DEEPTOOLS ( ch_final_bams )
+
+DEEPTOOLS (
+    ch_final_filter_bam.map { meta, bam, bai -> bam }, 
+    ch_final_filter_bam.map { meta, bam, bai -> bai } 
+)
 
     // 9. Peak Calling
     ch_peaks = Channel.empty()
