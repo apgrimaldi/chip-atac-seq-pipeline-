@@ -16,6 +16,7 @@ include { HOMER_ANNOTATEPEAKS } from '../modules/local/homer_annotate.nf'
 include { CALC_FRIP } from '../modules/local/calc_frip.nf'
 include { DEEPTOOLS } from '../modules/local/deeptools.nf'
 include { MULTIQC } from '../modules/local/multiqc.nf'
+include { SAMTOOLS_INDEX } from '../modules/local/samtools_index.nf'
 
 workflow ATAC_CHIP_PIPELINE {
     take:
@@ -45,24 +46,28 @@ workflow ATAC_CHIP_PIPELINE {
     PICARD_MARKDUPLICATES ( SAMTOOLS_SORT.out.bam, [], [] )
     ch_versions = ch_versions.mix(PICARD_MARKDUPLICATES.out.versions)
 
-    // 6. Filtraggio Blacklist
     def blacklist_val = params.genomes[ params.genome ]?.blacklist ?: null
     
     if (blacklist_val) {
         ch_blacklist = file(blacklist_val)
         
-        // Normalizziamo l'input per FILTERING assicurandoci che sia una terna
+        // Prepariamo l'input per FILTERING (sempre terna)
         ch_to_filter = PICARD_MARKDUPLICATES.out.bam.map { it ->
             it.size() == 3 ? it : [ it[0], it[1], [] ]
         }
         
         FILTERING ( ch_to_filter, ch_blacklist )
         
-        // Bedtools distrugge il BAI, quindi creiamo [meta, bam, empty_list]
-        ch_final_bams = FILTERING.out.bam.map { it -> [ it[0], it[1], [] ] }
-        ch_versions = ch_versions.mix(FILTERING.out.versions)
+        // --- NOVITÀ: RIGENERIAMO IL BAI ---
+        // Mandiamo il BAM filtrato al nuovo modulo separato
+        SAMTOOLS_INDEX ( FILTERING.out.bam )
+        
+        // Ora ch_final_bams è finalmente una terna REALE: [meta, bam_filtrato, bai_nuovo]
+        ch_final_bams = SAMTOOLS_INDEX.out.bam_bai
+        
+        ch_versions = ch_versions.mix(FILTERING.out.versions, SAMTOOLS_INDEX.out.versions)
     } else {
-        // Se non filtriamo, usiamo l'output di Picard normalizzato a 3 elementi
+        // Se non filtriamo, usiamo l'output di Picard (che ha già il suo BAI)
         ch_final_bams = PICARD_MARKDUPLICATES.out.bam.map { it ->
             it.size() == 3 ? it : [ it[0], it[1], [] ]
         }
