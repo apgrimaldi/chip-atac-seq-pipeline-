@@ -1,5 +1,4 @@
-questo è l'analysis vecchio prima delle ultime modifiche : 
-include { FASTQC }                 from '../modules/local/fastqc.nf'
+ include { FASTQC }                 from '../modules/local/fastqc.nf'
 include { TRIMGALORE }             from '../modules/local/trimgalore.nf'
 include { BOWTIE2 }                from '../modules/local/bowtie2.nf'
 include { SAMTOOLS_SORT }          from '../modules/local/samtools_sort.nf'
