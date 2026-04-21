@@ -23,6 +23,7 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = Channel.empty()
 
     ch_multiqc_config = Channel.fromPath("$projectDir/assets/multiqc_config.yml", checkIfExists: true)
+  
 
     // 1. Qualità iniziale
     FASTQC ( ch_input )
@@ -59,16 +60,15 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
     // 8. DeepTools (BigWig)
-
-DEEPTOOLS (
-        ch_final_bams.map { meta, bam, bai -> bam }, 
-        ch_final_bams.map { meta, bam, bai -> bai } 
+    // Usiamo .out per assicurarci di avere sia BAM che BAI prodotti da FILTERING o PICARD
+    DEEPTOOLS (
+        ch_final_bams.map { it[1] }, // BAM
+        ch_final_bams.map { it[2] }  // BAI
     )
 
     // 9. Peak Calling
     ch_peaks = Channel.empty()
   
-
     if (params.protocol == 'atac') {
         MACS3_ATAC_NARROW ( ch_final_bams )
         MACS3_ATAC_BROAD  ( ch_final_bams )
@@ -78,12 +78,12 @@ DEEPTOOLS (
     } 
     else if (params.protocol == 'chip') {
         ch_control_bams = ch_final_bams
-            .filter { meta, bam -> meta.antibody == 'none' || !meta.antibody || meta.antibody == '' }
-            .map { meta, bam -> [ meta.id, bam ] }
+            .filter { meta, bam, bai -> meta.antibody == 'none' || !meta.antibody || meta.antibody == '' }
+            .map { meta, bam, bai -> [ meta.id, bam ] }
 
         ch_macs3_chip_input = ch_final_bams
-            .filter { meta, bam -> meta.antibody && meta.antibody != 'none' && meta.antibody != '' }
-            .map { meta, bam -> [ meta.control, meta, bam ] } 
+            .filter { meta, bam, bai -> meta.antibody && meta.antibody != 'none' && meta.antibody != '' }
+            .map { meta, bam, bai -> [ meta.control, meta, bam ] } 
             .join(ch_control_bams)
             .map { id_ctrl, meta, bam_ip, bam_ctrl -> [ meta, bam_ip, bam_ctrl ] }
 
@@ -95,7 +95,8 @@ DEEPTOOLS (
     }
 
     // 10. FRiP
-    ch_frip_input = ch_final_bams.join(ch_frip_peaks)
+    // Join basato sui metadati (primo elemento della tupla)
+    ch_frip_input = ch_final_bams.map{ meta, bam, bai -> [meta, bam] }.join(ch_frip_peaks)
     CALC_FRIP ( ch_frip_input )
 
     // 11. Annotazione
@@ -107,8 +108,6 @@ DEEPTOOLS (
     }
 
     // --- 12. MULTIQC ---
-    
-    // Creazione del sommario (Genoma, Protocollo, etc.)
     def summary_info = """
     Pipeline Configuration:
     - Protocol: ${params.protocol.toUpperCase()}
@@ -117,10 +116,8 @@ DEEPTOOLS (
     - Outdir:   ${params.outdir}
     """.stripIndent()
     
-    // Trasforma la stringa in un file che MultiQC può leggere
     def ch_workflow_summary = Channel.value(summary_info).collectFile(name: 'workflow_summary_mqc.txt')
 
-    // Chiamata al modulo MULTIQC
     MULTIQC (
         ch_multiqc_config.collect().ifEmpty([]),
         ch_workflow_summary,
