@@ -14,7 +14,7 @@ include { CALC_FRIP } from '../modules/local/calc_frip.nf'
 include { DEEPTOOLS } from '../modules/local/deeptools.nf'
 include { MULTIQC } from '../modules/local/multiqc.nf'
 
-workflow ATAC_CHIP_PIPELINE {
+workflow ATAC_CHIP_PIPELINE{
     take:
     ch_input
     ch_index
