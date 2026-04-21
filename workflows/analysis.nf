@@ -22,6 +22,8 @@ workflow ATAC_CHIP_PIPELINE {
     main:
     ch_versions = Channel.empty()
 
+    ch_multiqc_config = Channel.fromPath("$projectDir/assets/multiqc_config.yml", checkIfExists: true)
+
     // 1. Qualità iniziale
     FASTQC ( ch_input )
     ch_versions = ch_versions.mix(FASTQC.out.versions)
