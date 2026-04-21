@@ -73,11 +73,8 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
     // 8. DeepTools (Generazione BigWig)
-    def genes_bed = params.genomes[ params.genome ]?.genes_bed ? file(params.genomes[ params.genome ].genes_bed) : []
-
     DEEPTOOLS ( 
-        ch_final_bams, // Passiamo direttamente la terna [meta, bam, bai]
-        genes_bed
+        (ch_final_bams) , // Passiamo direttamente la terna meta, bam, baigenes_bed
     )
 
     // 9. Peak Calling
