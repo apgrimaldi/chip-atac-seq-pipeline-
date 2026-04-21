@@ -1,3 +1,5 @@
+nextflow.enable.dsl=2
+
 // --- INCLUDE DEI MODULI ---
 include { FASTQC } from '../modules/local/fastqc.nf'
 include { TRIMGALORE } from '../modules/local/trimgalore.nf'
@@ -39,23 +41,31 @@ workflow ATAC_CHIP_PIPELINE {
     // 4. Ordinamento
     SAMTOOLS_SORT ( BOWTIE2.out.bam )
 
-    // 5. Duplicati (Emette meta, bam, bai)
+    // 5. Duplicati (Picard genera BAM e BAI)
     PICARD_MARKDUPLICATES ( SAMTOOLS_SORT.out.bam, [], [] )
     ch_versions = ch_versions.mix(PICARD_MARKDUPLICATES.out.versions)
 
     // 6. Filtraggio Blacklist
     def blacklist_val = params.genomes[ params.genome ]?.blacklist ?: null
+    
     if (blacklist_val) {
-        // file() assicura il download se è un URL
-        ch_blacklist = file(blacklist_val) 
-        FILTERING ( PICARD_MARKDUPLICATES.out.bam, ch_blacklist )
+        ch_blacklist = file(blacklist_val)
         
-        // Bedtools distrugge l'indice, quindi creiamo una terna con un placeholder vuoto []
+        // Normalizziamo l'input per FILTERING assicurandoci che sia una terna
+        ch_to_filter = PICARD_MARKDUPLICATES.out.bam.map { it ->
+            it.size() == 3 ? it : [ it[0], it[1], [] ]
+        }
+        
+        FILTERING ( ch_to_filter, ch_blacklist )
+        
+        // Bedtools distrugge il BAI, quindi creiamo [meta, bam, empty_list]
         ch_final_bams = FILTERING.out.bam.map { it -> [ it[0], it[1], [] ] }
         ch_versions = ch_versions.mix(FILTERING.out.versions)
     } else {
-        // Se non filtriamo, usiamo l'output di Picard (meta, bam, bai)
-        ch_final_bams = PICARD_MARKDUPLICATES.out.bam
+        // Se non filtriamo, usiamo l'output di Picard normalizzato a 3 elementi
+        ch_final_bams = PICARD_MARKDUPLICATES.out.bam.map { it ->
+            it.size() == 3 ? it : [ it[0], it[1], [] ]
+        }
     }
 
     // 7. Statistiche Allineamento
@@ -74,16 +84,14 @@ workflow ATAC_CHIP_PIPELINE {
 
     if (params.protocol == 'atac') {
         ch_macs_input = ch_final_bams.map { it -> [ it[0], it[1] ] }
-        
         MACS3_ATAC_NARROW ( ch_macs_input )
         MACS3_ATAC_BROAD  ( ch_macs_input )
-        
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
-        ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
+        ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions)
     } 
     else if (params.protocol == 'chip') {
-        // Separiamo Controlli (Input/IgG) e Campioni (IP)
+        // Separazione Controlli (Input) e Campioni (IP)
         ch_control_bams = ch_final_bams
             .filter { it -> 
                 def m = it[0]
@@ -102,49 +110,31 @@ workflow ATAC_CHIP_PIPELINE {
 
         MACS3_CHIP_NARROW ( ch_macs3_chip_input )
         MACS3_CHIP_BROAD  ( ch_macs3_chip_input )
-        
         ch_peaks = MACS3_CHIP_NARROW.out.peaks.mix(MACS3_CHIP_BROAD.out.peaks)
         ch_frip_peaks = MACS3_CHIP_NARROW.out.peaks
-        ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions, MACS3_CHIP_BROAD.out.versions)
+        ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions)
     }
 
-    // 10. FRiP (Fraction of Reads in Peaks)
-    ch_frip_input = ch_final_bams
-        .map { it -> [ it[0], it[1] ] }
-        .join(ch_frip_peaks)
-    
+    // 10. FRiP
+    ch_frip_input = ch_final_bams.map { it -> [ it[0], it[1] ] }.join(ch_frip_peaks)
     CALC_FRIP ( ch_frip_input )
-    ch_versions = ch_versions.mix(CALC_FRIP.out.versions)
 
-    // 11. Annotazione con HOMER
+    // 11. Annotazione
     def fasta = params.genomes[ params.genome ]?.fasta ?: null
     def gtf   = params.genomes[ params.genome ]?.gtf   ?: null
     if (fasta && gtf) {
         HOMER_ANNOTATEPEAKS ( ch_peaks, file(fasta), file(gtf) )
-        ch_versions = ch_versions.mix(HOMER_ANNOTATEPEAKS.out.versions)
     }
 
-    // 12. MULTIQC
-    def summary_info = "Protocol: ${params.protocol.toUpperCase()}\nGenome: ${params.genome}"
-    def ch_workflow_summary = Channel.value(summary_info).collectFile(name: 'workflow_summary_mqc.txt')
-
+    // 12. MultiQC
     MULTIQC (
         ch_multiqc_config.collect().ifEmpty([]),
-        ch_workflow_summary,
         FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]),
         TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]),
-        BOW_LOG = BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),
+        BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),
         PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),
         SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),
         ch_peaks.map{ it[1] }.collect().ifEmpty([]),
-        CALC_FRIP.out.summary.map{ it[1] }.collect().ifEmpty([]),
         ch_versions.unique().collect().ifEmpty([])
     )
-
-    emit:
-    bam      = ch_final_bams
-    peaks    = ch_peaks
-    bigwig   = DEEPTOOLS.out.bw
-    multiqc  = MULTIQC.out.report
-    versions = ch_versions
 }
