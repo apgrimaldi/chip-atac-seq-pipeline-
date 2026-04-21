@@ -2,7 +2,7 @@ process FILTERING {
     tag "$meta.id"
     label 'process_medium'
     
-    container  container 'quay.io/biocontainers/bedtools:2.30.0--hc088bd4_0'
+    container 'quay.io/biocontainers/bedtools:2.30.0--hc088bd4_0'
 
     publishDir "${params.outdir}/04_filtered", mode: 'copy'
 
