@@ -42,35 +42,30 @@ workflow ATAC_CHIP_PIPELINE {
     // 4. Ordinamento
     SAMTOOLS_SORT ( BOWTIE2.out.bam )
 
-    // 5. Duplicati (Picard genera BAM e BAI)
+    // 5. Duplicati (Normalizziamo l'output a terna [meta, bam, bai])
     PICARD_MARKDUPLICATES ( SAMTOOLS_SORT.out.bam, [], [] )
     ch_versions = ch_versions.mix(PICARD_MARKDUPLICATES.out.versions)
+    
+    ch_picard_bams = PICARD_MARKDUPLICATES.out.bam.map { it ->
+        it.size() == 3 ? it : [ it[0], it[1], it[2] ?: [] ]
+    }
 
+    // 6. Filtraggio Blacklist
     def blacklist_val = params.genomes[ params.genome ]?.blacklist ?: null
     
     if (blacklist_val) {
         ch_blacklist = file(blacklist_val)
         
-        // Prepariamo l'input per FILTERING (sempre terna)
-        ch_to_filter = PICARD_MARKDUPLICATES.out.bam.map { it ->
-            it.size() == 3 ? it : [ it[0], it[1], [] ]
-        }
+        // FILTERING riceve la terna da Picard e la blacklist
+        FILTERING ( ch_picard_bams, ch_blacklist )
         
-        FILTERING ( ch_to_filter, ch_blacklist )
-        
-        // --- NOVITÀ: RIGENERIAMO IL BAI ---
-        // Mandiamo il BAM filtrato al nuovo modulo separato
+        // RIGENERIAMO IL BAI dopo il filtraggio
         SAMTOOLS_INDEX ( FILTERING.out.bam )
         
-        // Ora ch_final_bams è finalmente una terna REALE: [meta, bam_filtrato, bai_nuovo]
         ch_final_bams = SAMTOOLS_INDEX.out.bam_bai
-        
         ch_versions = ch_versions.mix(FILTERING.out.versions, SAMTOOLS_INDEX.out.versions)
     } else {
-        // Se non filtriamo, usiamo l'output di Picard (che ha già il suo BAI)
-        ch_final_bams = PICARD_MARKDUPLICATES.out.bam.map { it ->
-            it.size() == 3 ? it : [ it[0], it[1], [] ]
-        }
+        ch_final_bams = ch_picard_bams
     }
 
     // 7. Statistiche Allineamento
@@ -78,6 +73,7 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = ch_versions.mix(SAMTOOLS_STATS.out.versions)
 
     // 8. DeepTools (Generazione BigWig)
+    // Passiamo BAM e BAI come file separati
     DEEPTOOLS ( 
         ch_final_bams.map { it -> [ it[0], it[1] ] },
         ch_final_bams.map { it -> it[2] } 
@@ -91,12 +87,12 @@ workflow ATAC_CHIP_PIPELINE {
         ch_macs_input = ch_final_bams.map { it -> [ it[0], it[1] ] }
         MACS3_ATAC_NARROW ( ch_macs_input )
         MACS3_ATAC_BROAD  ( ch_macs_input )
+        
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
-        ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions)
+        ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
     } 
     else if (params.protocol == 'chip') {
-        // Separazione Controlli (Input) e Campioni (IP)
         ch_control_bams = ch_final_bams
             .filter { it -> 
                 def m = it[0]
@@ -111,24 +107,27 @@ workflow ATAC_CHIP_PIPELINE {
             }
             .map { it -> [ it[0].control, it[0], it[1] ] } 
             .join(ch_control_bams)
-            .map { it -> [ it[1], it[2], it[3] ] } // [meta, bam_ip, bam_ctrl]
+            .map { it -> [ it[1], it[2], it[3] ] }
 
         MACS3_CHIP_NARROW ( ch_macs3_chip_input )
         MACS3_CHIP_BROAD  ( ch_macs3_chip_input )
+        
         ch_peaks = MACS3_CHIP_NARROW.out.peaks.mix(MACS3_CHIP_BROAD.out.peaks)
         ch_frip_peaks = MACS3_CHIP_NARROW.out.peaks
-        ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions)
+        ch_versions = ch_versions.mix(MACS3_CHIP_NARROW.out.versions, MACS3_CHIP_BROAD.out.versions)
     }
 
     // 10. FRiP
     ch_frip_input = ch_final_bams.map { it -> [ it[0], it[1] ] }.join(ch_frip_peaks)
     CALC_FRIP ( ch_frip_input )
+    ch_versions = ch_versions.mix(CALC_FRIP.out.versions)
 
     // 11. Annotazione
     def fasta = params.genomes[ params.genome ]?.fasta ?: null
     def gtf   = params.genomes[ params.genome ]?.gtf   ?: null
     if (fasta && gtf) {
         HOMER_ANNOTATEPEAKS ( ch_peaks, file(fasta), file(gtf) )
+        ch_versions = ch_versions.mix(HOMER_ANNOTATEPEAKS.out.versions)
     }
 
     // 12. MULTIQC
@@ -143,7 +142,7 @@ workflow ATAC_CHIP_PIPELINE {
         BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]), // 5
         PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]), // 6
         SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]), // 7
-        DEEPTOOLS.out.bw.collect().ifEmpty([]),         // 8 (Aggiunto/Verificato)
+        DEEPTOOLS.out.bw.map{ it[1] }.collect().ifEmpty([]), // 8 (Prendiamo solo il file .bw)
         ch_peaks.map{ it[1] }.collect().ifEmpty([]),    // 9
         ch_versions.unique().collect().ifEmpty([])      // 10
     )
