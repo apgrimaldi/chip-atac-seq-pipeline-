@@ -16,8 +16,8 @@ include { MULTIQC } from '../modules/local/multiqc.nf'
 
 workflow ATAC_CHIP_PIPELINE {
     take:
-    ch_input    // [meta, [reads]]
-    ch_index    // path_to_index_folder
+    ch_input
+    ch_index
 
     main:
     ch_versions = Channel.empty()
