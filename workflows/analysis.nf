@@ -126,15 +126,20 @@ workflow ATAC_CHIP_PIPELINE {
         HOMER_ANNOTATEPEAKS ( ch_peaks, file(fasta), file(gtf) )
     }
 
-    // 12. MultiQC
+    // 12. MULTIQC
+    def summary_info = "Protocol: ${params.protocol.toUpperCase()}\nGenome: ${params.genome}"
+    def ch_workflow_summary = Channel.value(summary_info).collectFile(name: 'workflow_summary_mqc.txt')
+
     MULTIQC (
-        ch_multiqc_config.collect().ifEmpty([]),
-        FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]),
-        TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]),
-        BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),
-        PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),
-        SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),
-        ch_peaks.map{ it[1] }.collect().ifEmpty([]),
-        ch_versions.unique().collect().ifEmpty([])
+        ch_multiqc_config.collect().ifEmpty([]),        // 1
+        ch_workflow_summary.collect().ifEmpty([]),      // 2
+        FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]), // 3
+        TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]), // 4
+        BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]), // 5
+        PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]), // 6
+        SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]), // 7
+        DEEPTOOLS.out.bw.collect().ifEmpty([]),         // 8 (Aggiunto/Verificato)
+        ch_peaks.map{ it[1] }.collect().ifEmpty([]),    // 9
+        ch_versions.unique().collect().ifEmpty([])      // 10
     )
 }
