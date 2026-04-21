@@ -63,33 +63,36 @@ workflow ATAC_CHIP_PIPELINE {
         ch_final_bams.map { meta, bam, bai -> bai }
     )
 
-    // 9. Peak Calling
+   // 9. Peak Calling
     ch_peaks = Channel.empty()
     ch_frip_peaks = Channel.empty() 
 
     if (params.protocol == 'atac') {
-        // Spacchettiamo a 3 elementi [meta, bam, bai] ma passiamo solo [meta, bam]
-        MACS3_ATAC_NARROW ( ch_final_bams.map { meta, bam, bai -> [ meta, bam ] } )
-        MACS3_ATAC_BROAD  ( ch_final_bams.map { meta, bam, bai -> [ meta, bam ] } )
+        // Qui usiamo solo meta e bam, ignorando il resto
+        MACS3_ATAC_NARROW ( ch_final_bams.map { it -> [ it[0], it[1] ] } )
+        MACS3_ATAC_BROAD  ( ch_final_bams.map { it -> [ it[0], it[1] ] } )
         
         ch_peaks = MACS3_ATAC_NARROW.out.peaks.mix(MACS3_ATAC_BROAD.out.peaks)
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks 
         ch_versions = ch_versions.mix(MACS3_ATAC_NARROW.out.versions, MACS3_ATAC_BROAD.out.versions)
-    }
+    } 
     else if (params.protocol == 'chip') {
         // 1. Identifichiamo i controlli (Input o IgG)
+        // Usiamo 'it' per evitare errori di spacchettamento
         ch_control_bams = ch_final_bams
-            .filter { meta, bam, bai -> 
+            .filter { it -> 
+                def meta = it[0]
                 meta.antibody == 'none' || !meta.antibody || meta.antibody == 'IgG' || meta.antibody == '' 
             }
-            .map { meta, bam, bai -> [ meta.id, bam ] }
+            .map { it -> [ it[0].id, it[1] ] } // [id_controllo, bam_controllo]
 
-        // 2. Prepariamo gli IP e facciamo il join con i loro controlli
+        // 2. Prepariamo gli IP e facciamo il join
         ch_macs3_chip_input = ch_final_bams
-            .filter { meta, bam, bai -> 
+            .filter { it -> 
+                def meta = it[0]
                 meta.antibody && meta.antibody != 'none' && meta.antibody != 'IgG' && meta.antibody != '' 
             }
-            .map { meta, bam, bai -> [ meta.control, meta, bam ] } 
+            .map { it -> [ it[0].control, it[0], it[1] ] } // [id_controllo, meta_ip, bam_ip]
             .join(ch_control_bams)
             .map { id_ctrl, meta, bam_ip, bam_ctrl -> [ meta, bam_ip, bam_ctrl ] }
 
