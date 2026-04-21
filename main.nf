@@ -1,7 +1,7 @@
 nextflow.enable.dsl=2
 
 
-include { ATAC_CHIP_PIPELINE } from './workflows/analysis'
+include { ATAC_CHIP_PIPELINE } from './workflows/analysis.nf'
 
 /**
  * Funzione per parsare le righe del CSV e creare la struttura dati [meta, [reads]]
