@@ -11,14 +11,17 @@ process MACS3_ATAC_NARROW {
     path "versions.yml"                  , emit: versions
 
     script:
-    def prefix = "${meta.id}_atac_narrow"
-    def format = meta.single_end ? 'BAM' : 'BAMPE'
+    def prefix   = "${meta.id}_atac_narrow"
+    def format   = meta.single_end ? 'BAM' : 'BAMPE'
+    
+    // Traduzione per l'uomo: hg38/GRCh38 -> hs
     def m_genome = (params.genome == 'hg38' || params.genome == 'GRCh38') ? 'hs' : params.genome
-"""
+
+    """
     macs3 callpeak \\
         -t $bam \\
         -f $format \\
-        -g $genome \\
+        -g $m_genome \\
         -n $prefix \\
         --nomodel --shift -100 --extsize 200 \\
         --qvalue 0.05
