@@ -15,8 +15,15 @@ process MACS3_CHIP_NARROW {
     def prefix   = "${meta.id}_narrow"
     def format   = meta.single_end ? 'BAM' : 'BAMPE'
     
-    // Converte hg38 o GRCh38 in 'hs' (human), altrimenti usa il valore originale
-    def m_genome = (params.genome == 'hg38' || params.genome == 'GRCh38') ? 'hs' : params.genome
+    // Mappa per la traduzione automatica dei genomi
+    def genome_map = [
+        'hg38': 'hs', 'GRCh38': 'hs', 'hg19': 'hs',
+        'mm10': 'mm', 'mm9': 'mm', 'GRCm38': 'mm',
+        'dm6': 'dm', 'ce11': 'ce'
+    ]
+    
+    // Traduzione dinamica: se non trova il match, usa il valore di params.genome
+    def m_genome = genome_map[params.genome] ?: params.genome
 
     """
     macs3 callpeak \\
