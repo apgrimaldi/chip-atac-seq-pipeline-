@@ -16,18 +16,19 @@ process DEEPTOOLS_TSS {
     path "versions.yml"                    , emit: versions
 
     script:
-    def prefix = "${meta.id}"
-    """
-    # 1. Calcola la matrice centrata sul TSS
-    # Cambiato il nome file in .tss.matrix.gz per matchare l'output
-    computeMatrix reference-point \\
-        --referencePoint TSS \\
-        -S $bw \\
-        -R $gtf \\
-        -a 3000 -b 3000 \\
-        --skipZeros \\
-        -o ${prefix}.tss.matrix.gz \\
-        --numberOfProcessors $task.cpus
+def prefix = "${meta.id}"
+"""
+# Rimuove righe di intestazione o commenti che rompono deepTools
+grep -v '^#' $gtf > clean.gtf
+
+computeMatrix reference-point \\
+    --referencePoint TSS \\
+    -S $bw \\
+    -R clean.gtf \\
+    -a 3000 -b 3000 \\
+    --skipZeros \\
+    -o ${prefix}.tss.matrix.gz \\
+    --numberOfProcessors $task.cpus
 
     # 2. Genera il grafico e i DATI (tab) per MultiQC
     # MultiQC ha bisogno del file .tab per generare il grafico interattivo
