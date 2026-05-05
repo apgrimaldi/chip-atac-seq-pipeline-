@@ -3,7 +3,7 @@ process HOMER_ANNOTATEPEAKS {
     label 'process_medium'
 
     // Versione leggermente più recente e stabile
-    container 'quay.io/biocontainers/homer:4.11--pl5321h9ee0642_3'
+    container 'quay.io/biocontainers/homer:4.11--pl526hc9558a2_3'
 
     input:
     tuple val(meta), path(peak)
