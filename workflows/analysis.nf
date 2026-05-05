@@ -26,12 +26,7 @@ process PREPARE_TSS_BED {
     output: path "tss_regions.bed"
     script:
     """
-    # 1. Estrae le righe 'transcript'
-    # 2. Rimuove virgolette e punti e virgola subito per evitare problemi di parsing
-    # 3. Usa AWK per calcolare le coordinate e forzare i TAB (\t)
-    # 4. 'grep -v' elimina righe vuote o malformate
-    # 5. 'sort' ordina il file (richiesto da molti tool bioinformatici)
-    
+    # Usiamo \$ per dire a Nextflow di NON interpretare questi simboli
     grep -w "transcript" $gtf | \
     sed 's/[";]//g' | \
     awk 'BEGIN{OFS="\\t"} {
@@ -39,7 +34,7 @@ process PREPARE_TSS_BED {
         else {start=\$5-1; end=\$5}
         if (start >= 0) print \$1, start, end, \$10, "0", \$7
     }' | \
-    grep -v "^$" | \
+    grep -v "^\$" | \
     sort -k1,1 -k2,2n > tss_regions.bed
     """
 }
