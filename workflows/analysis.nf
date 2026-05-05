@@ -17,6 +17,7 @@ include { CALC_FRIP } from '../modules/local/calc_frip.nf'
 include { DEEPTOOLS } from '../modules/local/deeptools.nf'
 include { MULTIQC } from '../modules/local/multiqc.nf'
 include { SAMTOOLS_INDEX } from '../modules/local/samtools_index.nf'
+include { DEEPTOOLS_TSS } from '../modules/local/deeptools_tss.nf'
 
 workflow ATAC_CHIP_PIPELINE {
     take:
@@ -77,6 +78,9 @@ workflow ATAC_CHIP_PIPELINE {
     DEEPTOOLS ( ch_final_bams )
     ch_versions = ch_versions.mix(DEEPTOOLS.out.versions)
 
+    // I BigWig sono generati dal modulo DEEPTOOLS precedente
+     DEEPTOOLS_TSS ( DEEPTOOLS.out.bw, file(gtf_file) )
+
     // 9. Peak Calling
     ch_peaks = Channel.empty()
     ch_frip_peaks = Channel.empty() 
@@ -135,6 +139,7 @@ workflow ATAC_CHIP_PIPELINE {
         ch_peaks.map{ it[1] }.collect().ifEmpty([]),
         CALC_FRIP.out.frip.map{ it instanceof List ? it[1] : it }.collect().ifEmpty([]),       
         HOMER_ANNOTATEPEAKS.out.txt.map{ it instanceof List ? it[1] : it }.collect().ifEmpty([]),
-        ch_versions_multiqc.collect()
-    )
+        DEEPTOOLS_TSS.out.table.collect().ifEmpty([]), 
+        ch_versions_multiqc.collect()                  
+)
 }
