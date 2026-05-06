@@ -82,6 +82,7 @@ workflow ATAC_CHIP_PIPELINE {
     ch_frip_peaks = Channel.empty()
     ch_narrow_counts_mqc = Channel.empty()
     ch_broad_counts_mqc  = Channel.empty()
+    ch_macs_logs_mqc = Channel.empty()
 
     if (params.protocol == 'atac') {
         ch_macs_input = ch_final_bams.map { it -> [ it[0], it[1] ] }
@@ -92,9 +93,12 @@ workflow ATAC_CHIP_PIPELINE {
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks
         ch_narrow_counts_mqc = MACS3_ATAC_NARROW.out.count_narrow
         ch_broad_counts_mqc  = MACS3_ATAC_BROAD.out.count_broad
+        
+        // Per ATAC raccogliamo i log/versioni
+        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.versions.map{ it[1] }
+                            .mix(MACS3_ATAC_BROAD.out.versions.map{ it[1] })
     } 
     else if (params.protocol == 'chip') {
-        // Supponendo input semplice senza controlli per brevità, adatta se necessario
         ch_macs3_chip_input = ch_final_bams.map { it -> [ it[0], it[1], [] ] } 
         MACS3_CHIP_NARROW ( ch_macs3_chip_input )
         MACS3_CHIP_BROAD  ( ch_macs3_chip_input )
@@ -103,6 +107,10 @@ workflow ATAC_CHIP_PIPELINE {
         ch_frip_peaks = MACS3_CHIP_NARROW.out.peaks
         ch_narrow_counts_mqc = MACS3_CHIP_NARROW.out.count_narrow
         ch_broad_counts_mqc  = MACS3_CHIP_BROAD.out.count_broad
+
+        // Per ChIP passiamo i file .xls che MultiQC adora per le statistiche
+        ch_macs_logs_mqc = MACS3_CHIP_NARROW.out.xls.map{ it[1] }
+                            .mix(MACS3_CHIP_BROAD.out.xls.map{ it[1] })
     }
 
     // 10. FRiP
@@ -120,13 +128,6 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions_multiqc = ch_versions.unique().collectFile(name: 'collated_versions.yml')
     ch_all_counts_mqc = ch_narrow_counts_mqc.mix(ch_broad_counts_mqc).collect().ifEmpty([])
 
-    ch_macs_logs_mqc = Channel.empty()
-    if (params.protocol == 'atac') {
-        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.versions.mix(MACS3_ATAC_BROAD.out.versions)
-    } else {
-        ch_macs_logs_mqc = MACS3_CHIP_NARROW.out.xls.mix(MACS3_CHIP_BROAD.out.versions)
-    }
-
     MULTIQC (
         ch_multiqc_config.collect().ifEmpty([]),
         Channel.value("Protocol: ${params.protocol}\nGenome: ${params.genome}").collectFile(name: 'summary.txt'),
@@ -139,7 +140,7 @@ workflow ATAC_CHIP_PIPELINE {
         ch_macs_logs_mqc.collect().ifEmpty([]), 
         ch_all_counts_mqc,                      
         CALC_FRIP.out.frip.map{ it[1] }.collect().ifEmpty([]), 
-        ch_homer_mqc.collect().ifEmpty([]),
+        ch_homer_mqc,
         ch_versions_multiqc.collect()                    
     )
-} // <--- QUESTA GRAFFA MANCAVA
+}
