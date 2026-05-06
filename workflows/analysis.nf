@@ -149,3 +149,4 @@ workflow ATAC_CHIP_PIPELINE {
         ch_homer_mqc,
         ch_versions_multiqc.collect()                                       
     )
+}
