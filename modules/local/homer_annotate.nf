@@ -10,7 +10,7 @@ process HOMER_ANNOTATEPEAKS {
 
     output:
     tuple val(meta), path("*.annotatePeaks.txt"), emit: txt
-    tuple val(meta), path("*.homer_stats.txt") , emit: stats // AGGIUNTO PER MULTIQC
+    tuple val(meta), path("*.homer_stats.txt") , emit: stats 
     path "versions.yml"                         , emit: versions
 
     script:
@@ -24,18 +24,18 @@ process HOMER_ANNOTATEPEAKS {
         -cpu $task.cpus \\
         > ${prefix}.annotatePeaks.txt
 
-    # --- GENERAZIONE STATISTICHE PER MULTIQC (Screenshot 11.05.16) ---
-    # Creiamo l'header con le categorie esatte
+    # Estraiamo le statistiche pulite
+    # Usiamo 'cut' per isolare la colonna dell'annotazione (solitamente la 8a)
     echo -e "Sample\\tIntergenic\\tTTS\\texon\\tintron\\tpromoter-TSS" > ${prefix}.homer_stats.txt
     
-    # Contiamo le occorrenze di ogni categoria nel file di output di HOMER
-    INTERGENIC=\$(grep -c "Intergenic" ${prefix}.annotatePeaks.txt || true)
-    TTS=\$(grep -c "TTS" ${prefix}.annotatePeaks.txt || true)
-    EXON=\$(grep -c "exon" ${prefix}.annotatePeaks.txt || true)
-    INTRON=\$(grep -c "intron" ${prefix}.annotatePeaks.txt || true)
-    PROMOTER=\$(grep -i -c "promoter-TSS" ${prefix}.annotatePeaks.txt || true)
+    # Contiamo solo nella colonna specifica per evitare match errati nel nome del picco
+    TOTAL=\$(wc -l < ${prefix}.annotatePeaks.txt)
+    INTERGENIC=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "Intergenic" || true)
+    TTS=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "TTS" || true)
+    EXON=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "exon" || true)
+    INTRON=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "intron" || true)
+    PROMOTER=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -i -c "promoter-TSS" || true)
     
-    # Scriviamo i dati (usiamo il meta.id pulito o il prefix per distinguere narrow/broad)
     echo -e "${prefix}\\t\$INTERGENIC\\t\$TTS\\t\$EXON\\t\$INTRON\\t\$PROMOTER" >> ${prefix}.homer_stats.txt
 
     cat <<-END_VERSIONS > versions.yml
