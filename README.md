@@ -37,10 +37,31 @@ nextflow run apgrimaldi/chip-atac-seq-pipeline- \
   * `-latest`: Forces the download of the latest code version from GitHub.
   * `-profile docker`: Runs every tool within a dedicated container (recommended).
   * `--protocol`: Defines the type of analysis (`chip` or `atac`).
-  * `--genome`: Specifies the reference genome (e.g., `GRCh38` or `hg38`).
+  * `--genome`: Specifies the reference genome (e.g., `GRCh38`,`hg38`, ...).
   * `--input`: Path to the samplesheet CSV file.
 
------
+### Genome & Annotation (Custom Genome)
+ 
+* `--fasta_file` | Path to the reference genome FASTA file (e.g., `.fna`, `.fasta`). 
+* `--gtf_file` | Path to the gene annotation file (GTF format) for QC and peak annotation. 
+* `--macs_gsize` | Effective genome size for MACS3 (e.g., `2.7e9` for human, `hs`, or `mm`). 
+* `--blacklist` | Path to the BED file containing blacklisted regions to be excluded. 
+
+## Usage Example for Custom Genome
+
+To run the pipeline with a custom genome and all required annotations, use the following command:
+
+```bash
+nextflow run main.nf \
+  -profile docker \
+  --protocol <chip/atac> \
+  --input path/to/samplesheet.csv \
+  --fasta_file "/path/to/reference_genome.fna" \
+  --gtf_file "/path/to/annotation.gtf" \
+  --macs_gsize <genome_size> \
+  --blacklist "/path/to/blacklist.bed" \
+  -resume
+
 
 ## Pipeline Summary
 
@@ -53,7 +74,7 @@ The workflow performs the following steps:
 5.  **Duplicates Management**: Identification and removal of PCR duplicates with [Picard MarkDuplicates](https://broadinstitute.github.io/picard/).
 6.  **Blacklist Removal**: Filtering out reads overlapping problematic genomic regions using [BEDTools](https://bedtools.readthedocs.io/).
 7.  **Quality Metrics & Statistics**: Generating comprehensive alignment statistics with [SAMtools stats](http://www.htslib.org/doc/samtools-stats.html).
-8.  **Enrichment Analysis**: Generating Fingerprint and Profile plots to assess IP strength using [deepTools](https://deeptools.readthedocs.io/).
+8.  **Enrichment Analysis**: Generating Fingerprint to assess IP strength using [deepTools](https://deeptools.readthedocs.io/).
 9.  **Peak Calling**: Identification of enriched genomic regions (Narrow/Broad) with [MACS3](https://github.com/macs3-project/MACS).
 10. **Annotation**: Functional annotation of peaks relative to gene features using [HOMER](http://homer.ucsd.edu/homer/).
 11. **QC Metrics**: Calculation of the Fraction of Reads in Peaks (FRiP score).
