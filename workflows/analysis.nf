@@ -142,4 +142,13 @@ workflow ATAC_CHIP_PIPELINE {
         FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([]),                            // 3
         TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([]),                        // 4
         BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),                           // 5
-        PICARD
+        PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),         // 6
+        SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),                  // 7
+        DEEPTOOLS.out.fingerprint_txt.map{ it[1] }.collect().ifEmpty([]),             // 8
+        ch_macs_logs_mqc.collect().ifEmpty([]),                                       // 9
+        ch_all_counts_mqc,                                                            // 10
+        CALC_FRIP.out.frip.map{ it[1] }.collect().ifEmpty([]),                        // 11
+        ch_homer_mqc,                                                                 // 12
+        ch_versions_multiqc.collect()                                                 // 13
+    )
+}
