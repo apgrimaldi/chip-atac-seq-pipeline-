@@ -7,13 +7,14 @@ process BOWTIE2_BUILD {
     path fasta
 
     output:
-    path "bowtie2_index"  , emit: index
-    path "versions.yml"   , emit: versions
+    // Emettiamo tutti i file .bt2 generati
+    path "*.bt2*", emit: index
+    path "versions.yml", emit: versions
 
     script:
     """
-    mkdir bowtie2_index
-    bowtie2-build --threads $task.cpus $fasta bowtie2_index/${fasta.baseName}
+    # Costruiamo l'indice direttamente nella cartella corrente
+    bowtie2-build --threads $task.cpus $fasta ${fasta.baseName}
     
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
