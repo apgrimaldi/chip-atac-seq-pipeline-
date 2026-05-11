@@ -28,13 +28,12 @@ workflow ATAC_CHIP_PIPELINE {
     ch_versions = Channel.empty()
     ch_multiqc_config = Channel.fromPath("$projectDir/assets/multiqc_config.yml", checkIfExists: true)
 
-    // --- 1. LOGICA GENOMA (Config vs Manuale) ---
+    // --- 1. LOGICA GENOMA ---
     def fasta_file     = null
     def gtf_file       = null
     def bowtie2_index  = null
     def blacklist_path = null
     
-    // Priorità 1: Valore passato da riga di comando
     def m_genome = params.macs_gsize 
 
     if (params.genomes && params.genomes.containsKey(params.genome)) {
@@ -44,7 +43,6 @@ workflow ATAC_CHIP_PIPELINE {
         bowtie2_index  = params.bowtie2_index  ?: gdata.bowtie2
         blacklist_path = params.blacklist      ?: (gdata.containsKey('blacklist') ? gdata.blacklist : null)
         
-        // Priorità 2: Se non specificato da comando, prendi dal config
         if (!m_genome) m_genome = gdata.macs_gsize
     } else {
         fasta_file     = params.fasta_file
@@ -53,26 +51,22 @@ workflow ATAC_CHIP_PIPELINE {
         blacklist_path = params.blacklist
     }
 
-    // Priorità 3: Fallback se m_genome è ancora nullo o impostato come 'custom'
     if (!m_genome || m_genome == 'custom') {
         m_genome = 'hs'
-        log.warn "MACS3: Genome size non valida o non trovata. Impostato default: ${m_genome}"
+        log.warn "MACS3: Defaulting to 'hs' size."
     }
 
-    // --- 2. GESTIONE INDICE BOWTIE2 ---
+    // --- 2. INDICE BOWTIE2 ---
     ch_index_internal = Channel.empty()
-
     if (bowtie2_index) {
         ch_index_internal = Channel.fromPath("${bowtie2_index}/*.bt2*").collect()
     } else if (fasta_file) {
         BOWTIE2_BUILD ( file(fasta_file) )
         ch_index_internal = BOWTIE2_BUILD.out.index.collect()
         ch_versions = ch_versions.mix(BOWTIE2_BUILD.out.versions)
-    } else {
-        error "ERRORE: Genoma '${params.genome}' non riconosciuto. Fornisci --fasta_file o --bowtie2_index."
     }
 
-    // --- 3. START PIPELINE ---
+    // --- 3. CORE PROCESSING ---
     FASTQC ( ch_input )
     TRIMGALORE ( ch_input )
     ch_versions = ch_versions.mix(FASTQC.out.versions, TRIMGALORE.out.versions)
@@ -88,7 +82,6 @@ workflow ATAC_CHIP_PIPELINE {
 
     SAMTOOLS_INDEX ( PICARD_MARKDUPLICATES.out.bam )
     
-    // FILTRAGGIO DINAMICO BLACKLIST
     if (blacklist_path) {
         FILTERING ( SAMTOOLS_INDEX.out.bam_bai, file(blacklist_path) )
         SAMTOOLS_INDEX_FINAL ( FILTERING.out.bam )
@@ -97,13 +90,13 @@ workflow ATAC_CHIP_PIPELINE {
         ch_final_bams = SAMTOOLS_INDEX.out.bam_bai
     }
 
-    // 4. METRICHE E PEAKS
+    // --- 4. QC & DEEPTOOLS ---
     SAMTOOLS_STATS ( ch_final_bams.map { meta, bam, bai -> [ meta, bam ] } )
     DEEPTOOLS ( ch_final_bams )
 
     ch_macs_input = ch_final_bams.map { meta, bam, bai -> [ meta, bam ] }
     
-    // INIZIALIZZAZIONE CANALI PER MULTIQC
+    // --- 5. PEAK CALLING ---
     ch_peaks = Channel.empty()
     ch_frip_peaks = Channel.empty()
     ch_macs_logs_mqc = Channel.empty()
@@ -118,7 +111,7 @@ workflow ATAC_CHIP_PIPELINE {
         ch_frip_peaks = MACS3_ATAC_NARROW.out.peaks
         ch_narrow_counts_mqc = MACS3_ATAC_NARROW.out.count_narrow
         ch_broad_counts_mqc  = MACS3_ATAC_BROAD.out.count_broad
-        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.versions.map{ it[1] }.mix(MACS3_ATAC_BROAD.out.versions.map{ it[1] })
+        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.xls.map{ it[1] }.mix(MACS3_ATAC_BROAD.out.xls.map{ it[1] })
     } else {
         ch_macs_chip_input = ch_final_bams.map { meta, bam, bai -> [ meta, bam, [] ] }
         MACS3_CHIP_NARROW ( ch_macs_chip_input, m_genome )
@@ -131,19 +124,25 @@ workflow ATAC_CHIP_PIPELINE {
         ch_macs_logs_mqc = MACS3_CHIP_NARROW.out.xls.map{ it[1] }.mix(MACS3_CHIP_BROAD.out.xls.map{ it[1] })
     }
 
-    // 9. ANNOTAZIONE E FRIP
+    // --- 6. ANNOTATION & FRIP ---
     ch_frip_input = ch_final_bams.map { meta, bam, bai -> [ meta, bam ] }.join(ch_frip_peaks)
     CALC_FRIP ( ch_frip_input )
 
     ch_homer_mqc = Channel.empty()
     if (fasta_file && gtf_file) {
         HOMER_ANNOTATEPEAKS ( ch_peaks, file(fasta_file), file(gtf_file) )
-        ch_homer_mqc = HOMER_ANNOTATEPEAKS.out.stats.map{ it[1] }.collect().ifEmpty([])
+        // Usiamo stats_mqc (il file con gli header Custom Content)
+        ch_homer_mqc = HOMER_ANNOTATEPEAKS.out.stats.map{ it[1] }.collect()
     }
 
-    // 10. MULTIQC
+    // --- 7. MULTIQC PREPARATION ---
     ch_versions_multiqc = ch_versions.unique().collectFile(name: 'collated_versions.yml')
-    ch_all_counts_mqc = ch_narrow_counts_mqc.mix(ch_broad_counts_mqc).map{ it[1] }.collect().ifEmpty([])
+    
+    // Uniamo tutti i conteggi (narrow + broad) in un unico canale per MultiQC
+    ch_all_counts_mqc = ch_narrow_counts_mqc.mix(ch_broad_counts_mqc)
+                        .map{ it[1] }
+                        .collect()
+                        .ifEmpty([])
 
     MULTIQC (
         ch_multiqc_config.collect().ifEmpty([]),                                      
@@ -153,11 +152,17 @@ workflow ATAC_CHIP_PIPELINE {
         BOWTIE2.out.log.map{ it[1] }.collect().ifEmpty([]),                           
         PICARD_MARKDUPLICATES.out.metrics.map{ it[1] }.collect().ifEmpty([]),         
         SAMTOOLS_STATS.out.stats.map{ it[1] }.collect().ifEmpty([]),                  
-        DEEPTOOLS.out.fingerprint_txt.map{ it[1] }.collect().ifEmpty([]),             
+        
+        // DEEPTOOLS: Passiamo sia raw.txt che metrics.txt per far apparire i grafici
+        DEEPTOOLS.out.fingerprint_txt.map{ it[1] }.mix(DEEPTOOLS.out.fingerprint_metrics.map{ it[1] }).collect().ifEmpty([]),
+        
         ch_macs_logs_mqc.collect().ifEmpty([]),                                       
         ch_all_counts_mqc,                                                            
         CALC_FRIP.out.frip.map{ it[1] }.collect().ifEmpty([]),                        
-        ch_homer_mqc,                                                                 
+        
+        // HOMER CUSTOM CONTENT
+        ch_homer_mqc.ifEmpty([]),                                                     
+        
         ch_versions_multiqc.collect()                                                 
     )
 }
