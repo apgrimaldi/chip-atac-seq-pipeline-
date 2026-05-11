@@ -119,7 +119,7 @@ workflow ATAC_CHIP_PIPELINE {
 
     ch_homer_mqc = Channel.empty()
     if (fasta_file && gtf_file) {
-        HOMER_ANNOTATEPEAKS ( ch_peaks, file(fasta_file), file(gtf_file) )
+        HOMER_ANNOTATEPEAKS ( ch_frip_peaks, file(fasta_file), file(gtf_file) )
         ch_homer_mqc = HOMER_ANNOTATEPEAKS.out.stats_mqc.map{ it[1] }.collect().ifEmpty([])
     }
 
