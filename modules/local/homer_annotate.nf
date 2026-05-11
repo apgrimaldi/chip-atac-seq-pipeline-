@@ -10,26 +10,35 @@ process HOMER_ANNOTATEPEAKS {
 
     output:
     tuple val(meta), path("*.annotatePeaks.txt"), emit: txt
-    tuple val(meta), path("*.homer_stats.txt") , emit: stats 
-    path "versions.yml"                         , emit: versions
+    tuple val(meta), path("*.homer_stats.txt")   , emit: stats 
+    path "versions.yml"                           , emit: versions
 
     script:
+    // Determiniamo se stiamo lavorando su narrow o broad per il nome del file
     def type = peak.name.contains('narrow') ? 'narrow' : 'broad'
     def prefix = "${meta.id}.${type}"
     """
+    # 1. Gestione GTF (HOMER non accetta .gz)
+    GTF_FILE=\$(basename ${gtf})
+    if [[ \${GTF_FILE} == *.gz ]]; then
+        gunzip -c ${gtf} > reference.gtf
+        ANNOT_FILE="reference.gtf"
+    else
+        ANNOT_FILE="${gtf}"
+    fi
+
+    # 2. Esecuzione Annotazione
     annotatePeaks.pl \\
         $peak \\
         $fasta \\
-        -gtf $gtf \\
+        -gtf \${ANNOT_FILE} \\
         -cpu $task.cpus \\
         > ${prefix}.annotatePeaks.txt
 
-    # Estraiamo le statistiche pulite
-    # Usiamo 'cut' per isolare la colonna dell'annotazione (solitamente la 8a)
+    # 3. Estrazione statistiche (Colonna 8 di HOMER contiene l'annotazione)
     echo -e "Sample\\tIntergenic\\tTTS\\texon\\tintron\\tpromoter-TSS" > ${prefix}.homer_stats.txt
     
-    # Contiamo solo nella colonna specifica per evitare match errati nel nome del picco
-    TOTAL=\$(wc -l < ${prefix}.annotatePeaks.txt)
+    # Calcolo conteggi (grep -c restituisce 0 grazie a || true se non trova nulla)
     INTERGENIC=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "Intergenic" || true)
     TTS=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "TTS" || true)
     EXON=\$(cut -f8 ${prefix}.annotatePeaks.txt | grep -c "exon" || true)
@@ -38,6 +47,7 @@ process HOMER_ANNOTATEPEAKS {
     
     echo -e "${prefix}\\t\$INTERGENIC\\t\$TTS\\t\$EXON\\t\$INTRON\\t\$PROMOTER" >> ${prefix}.homer_stats.txt
 
+    # 4. Versioni
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         homer: 4.11
