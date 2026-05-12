@@ -163,7 +163,11 @@ workflow ATAC_CHIP_PIPELINE {
         .collectFile(name: 'summary.txt')
         .collect()
 
-    ch_versions_mqc = ch_versions.unique().collectFile(name: 'collated_versions.yml').collect().ifEmpty([])
+    ch_versions_mqc = ch_versions
+        .unique()
+        .collectFile(name: 'collated_versions.yml')
+        .collect()
+        .ifEmpty([])
     
     ch_fastqc_mqc   = FASTQC.out.zip.map{ it[1] }.collect().ifEmpty([])
     ch_trim_mqc     = TRIMGALORE.out.log.map{ it[1] }.collect().ifEmpty([])
@@ -173,11 +177,16 @@ workflow ATAC_CHIP_PIPELINE {
     ch_frip_mqc     = CALC_FRIP.out.frip.map{ it[1] }.collect().ifEmpty([])
     
     ch_macs_mqc     = ch_macs_logs_mqc.collect().ifEmpty([])
-    ch_counts_mqc   = ch_narrow_counts_mqc.mix(ch_broad_counts_mqc).map{ it[1] }.collect().ifEmpty([])
+    
+    ch_counts_mqc   = ch_narrow_counts_mqc.mix(ch_broad_counts_mqc)
+        .map{ it[1] }
+        .collect()
+        .ifEmpty([])
     
     ch_deeptools_mqc = DEEPTOOLS.out.fingerprint_txt.map{ it[1] }
         .mix(DEEPTOOLS.out.fingerprint_metrics.map{ it[1] })
-        .collect().ifEmpty([])
+        .collect()
+        .ifEmpty([])
 
     ch_homer_final    = ch_homer_mqc.collect().ifEmpty([])
     ch_diffbind_final = ch_diffbind_mqc.collect().ifEmpty([])
@@ -197,5 +206,5 @@ workflow ATAC_CHIP_PIPELINE {
         ch_homer_final,
         ch_diffbind_final,
         ch_versions_mqc
-    )    
+    )
 }
