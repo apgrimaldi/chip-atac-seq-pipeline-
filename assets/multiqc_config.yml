@@ -25,13 +25,13 @@ report_section_order:
     order: -300
     
   # --- FIX SAMTOOLS (Entrambe le sezioni) ---
-  samtools-stats-dp:
+  samtools-stats:
     order: -400
-  samtools_alignment:
+  samtools_flagstat:
     order: -410
     
   # --- FIX PICARD (Riportato giù) ---
-  picard_deduplication:
+  picard_markduplicates:
     order: -500
 
   # --- SEZIONI CUSTOM (MACS3, FRiP, HOMER) ---
