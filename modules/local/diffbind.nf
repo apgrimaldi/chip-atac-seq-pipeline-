@@ -39,16 +39,19 @@ process DIFFBIND {
     }
 
     # --- Heatmap di Correlazione ---
-    # margin=10 serve a non tagliare i nomi dei campioni
-    png("diffbind_correlation.png", width=900, height=900, res=120)
-    plot(db_obj, margin=10)
+    # Aumentiamo la risoluzione e aggiungiamo margini ampi (margin=20) 
+    # per evitare che i nomi lunghi vengano tagliati ai bordi.
+    png("diffbind_correlation.png", width=1000, height=1000, res=150)
+    plot(db_obj, margin=20)
     dev.off()
 
     img_corr_64 <- base64encode("diffbind_correlation.png")
+    
+    # Qui impostiamo la grandezza fissa a 500px per MultiQC
     cat(paste0(
         "\\n",
-        "<div style='text-align: center;'>\\n",
-        "  <img src='data:image/png;base64,", img_corr_64, "' style='width: 600px; height: auto;'>\\n",
+        "<div style='text-align: center; padding: 20px;'>\\n",
+        "  <img src='data:image/png;base64,", img_corr_64, "' style='width: 500px; max-width: 100%; height: auto;'>\\n",
         "</div>"
     ), file="diffbind_corr_mqc.html")
 
@@ -70,15 +73,17 @@ process DIFFBIND {
         write.csv(as.data.frame(res_db), "diff_bind_results.csv")
 
         # --- PCA Plot ---
-        png("diffbind_pca.png", width=900, height=800, res=120)
+        png("diffbind_pca.png", width=1000, height=800, res=150)
         dba.plotPCA(db_obj, attributes=contrast_category, label=DBA_ID)
         dev.off()
 
         img_pca_64 <- base64encode("diffbind_pca.png")
+        
+        # Anche la PCA limitata a 500px per coerenza
         cat(paste0(
             "\\n",
-            "<div style='text-align: center;'>\\n",
-            "  <img src='data:image/png;base64,", img_pca_64, "' style='width: 600px; height: auto;'>\\n",
+            "<div style='text-align: center; padding: 20px;'>\\n",
+            "  <img src='data:image/png;base64,", img_pca_64, "' style='width: 500px; max-width: 100%; height: auto;'>\\n",
             "</div>"
         ), file="diffbind_pca_mqc.html")
     }
