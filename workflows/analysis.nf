@@ -16,6 +16,8 @@ include { HOMER_ANNOTATEPEAKS } from '../modules/local/homer_annotate.nf'
 include { CALC_FRIP } from '../modules/local/calc_frip.nf'
 include { DEEPTOOLS } from '../modules/local/deeptools.nf'
 include { DIFFBIND } from '../modules/local/diffbind.nf'
+include { LANCEOTRON } from '../modules/local/lanceotron.nf'
+include { PROFILEPLYR } from '../modules/local/profileplyr.nf'
 include { MULTIQC } from '../modules/local/multiqc.nf'
 include { SAMTOOLS_INDEX } from '../modules/local/samtools_index.nf'
 include { SAMTOOLS_INDEX as SAMTOOLS_INDEX_FINAL } from '../modules/local/samtools_index.nf'
@@ -85,6 +87,9 @@ workflow ATAC_CHIP_PIPELINE {
     SAMTOOLS_STATS ( ch_final_bams.map { meta, bam, bai -> [ meta, bam ] } )
     DEEPTOOLS ( ch_final_bams )
 
+    LANCEOTRON ( ch_final_bams )
+    ch_versions = ch_versions.mix(LANCEOTRON.out.versions)
+
     ch_bams_branched = ch_final_bams.branch { meta, bam, bai ->
         control: meta.is_control == true
         ip:      true
@@ -149,11 +154,16 @@ workflow ATAC_CHIP_PIPELINE {
             ch_final_bams.map{ it[2] }.collect(), 
             ch_narrow_peaks.map{ it[1] }.collect() 
         )
-        
-        // Versione originale senza mix() complesso
         ch_diffbind_mqc = DIFFBIND.out.mqc_html.collect().ifEmpty([])
         ch_versions = ch_versions.mix(DIFFBIND.out.versions)
     }
+
+    PROFILEPLYR (
+        LANCEOTRON.out.peaks.map{ it[1] }.collect(),
+        LANCEOTRON.out.bigwig_res1.map{ it[1] }.collect()
+    )
+    ch_profileplyr_mqc = PROFILEPLYR.out.mqc_html.collect().ifEmpty([])
+    ch_versions = ch_versions.mix(PROFILEPLYR.out.versions)
 
     ch_summary_mqc = Channel.value("Protocol: ${params.protocol}\nGenome: ${params.genome}").collectFile(name: 'summary.txt').collect()
     ch_versions_mqc = ch_versions.unique().collectFile(name: 'collated_versions.yml').collect().ifEmpty([])
@@ -181,6 +191,7 @@ workflow ATAC_CHIP_PIPELINE {
         ch_frip_mqc,
         ch_homer_mqc,
         ch_diffbind_mqc,
+        ch_profileplyr_mqc,
         ch_versions_mqc
     )
 }
