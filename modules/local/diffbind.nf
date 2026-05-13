@@ -38,16 +38,12 @@ process DIFFBIND {
         db_obj <- dba(db_obj, mask=keep_mask)
     }
 
-    # --- Heatmap di Correlazione ---
-    # Aumentiamo la risoluzione e aggiungiamo margini ampi (margin=20) 
-    # per evitare che i nomi lunghi vengano tagliati ai bordi.
     png("diffbind_correlation.png", width=1000, height=1000, res=150)
     plot(db_obj, margin=20)
     dev.off()
 
     img_corr_64 <- base64encode("diffbind_correlation.png")
     
-    # Qui impostiamo la grandezza fissa a 500px per MultiQC
     cat(paste0(
         "\\n",
         "<div style='text-align: center; padding: 20px;'>\\n",
@@ -72,14 +68,12 @@ process DIFFBIND {
         res_db <- dba.report(db_obj)
         write.csv(as.data.frame(res_db), "diff_bind_results.csv")
 
-        # --- PCA Plot ---
         png("diffbind_pca.png", width=1000, height=800, res=150)
         dba.plotPCA(db_obj, attributes=contrast_category, label=DBA_ID)
         dev.off()
 
         img_pca_64 <- base64encode("diffbind_pca.png")
         
-        # Anche la PCA limitata a 500px per coerenza
         cat(paste0(
             "\\n",
             "<div style='text-align: center; padding: 20px;'>\\n",
