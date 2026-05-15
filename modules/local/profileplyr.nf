@@ -23,19 +23,23 @@ process PROFILEPLYR {
     library(base64enc)
     library(rtracklayer)
 
+    # Identificazione file
     peak_files <- list.files(pattern = "\\\\.(bed|narrowPeak|broadPeak)\$")
     bw_files <- list.files(pattern = "\\\\.(bw|bigWig)\$")
 
-    # Usiamo rtracklayer::import invece di readPeakFile
+    # Importazione picchi
     peaks_gr <- rtracklayer::import(peak_files[1])
 
-    pro_obj <- profileplyr(
+    # Creazione oggetto Profileplyr (Nota la 'P' maiuscola)
+    # Usiamo i nomi dei file puliti per la colonna sampleData
+    pro_obj <- Profileplyr(
         peaks_gr,
         binsize = 50,
         distance = 2000,
-        sampleData = data.frame(bamReads = bw_files)
+        sampleData = data.frame(bamReads = bw_files, row.names = basename(bw_files))
     )
 
+    # Generazione Heatmap
     png("profile_heatmap.png", width=1000, height=1200, res=150)
     generateEnrichedHeatmap(pro_obj)
     dev.off()
@@ -44,6 +48,7 @@ process PROFILEPLYR {
     generateEnrichedHeatmap(pro_obj)
     dev.off()
 
+    # Preparazione HTML per MultiQC
     img_64 <- base64encode("profile_heatmap.png")
     cat(paste0(
         "\\n",
@@ -53,6 +58,7 @@ process PROFILEPLYR {
         "</div>"
     ), file="profileplyr_mqc.html")
 
+    # Versioni
     writeLines(c(
         "\\"${task.process}\\":",
         paste0("    profileplyr: ", packageVersion("profileplyr")),
