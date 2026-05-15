@@ -21,7 +21,7 @@ include { MULTIQC } from '../modules/local/multiqc.nf'
 include { SAMTOOLS_INDEX } from '../modules/local/samtools_index.nf'
 include { SAMTOOLS_INDEX as SAMTOOLS_INDEX_FINAL } from '../modules/local/samtools_index.nf'
 include { PROFILEPLYR as PROFILEPLYR_LANCE } from '../modules/local/profileplyr.nf'
-include { PROFILEPLYR as PROFILEPLYR_MACS  } from '../modules/local/profileplyr.nf'
+include { PROFILEPLYR as PROFILEPLYR_MACS } from '../modules/local/profileplyr.nf'
 
 workflow ATAC_CHIP_PIPELINE {
     take:
