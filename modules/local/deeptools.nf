@@ -31,7 +31,7 @@ process DEEPTOOLS {
         --numberOfProcessors $task.cpus \\
         $extend
 
-    # 2. BigWig per Lanceotron (BinSize 1bp + Normalizzazione RPKM)
+    # 2. BigWig per Lanceotron 
     bamCoverage \\
         --bam $bam \\
         --outFileName ${prefix}.l6n.bw \\
