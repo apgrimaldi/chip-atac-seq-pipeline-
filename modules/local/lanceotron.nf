@@ -20,8 +20,8 @@ process LANCEOTRON {
     """
     lanceotron ${command} \\
         -f . \\
-        -t 0.9 \\
-        -w 1000
+        -t 4 \\
+        -w 400
 
     FOUND_BED=\$(ls *.bed 2>/dev/null | grep -v "filtered" | head -n 1)
 
