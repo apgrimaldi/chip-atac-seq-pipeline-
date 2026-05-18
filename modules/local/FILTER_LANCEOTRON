@@ -1,0 +1,52 @@
+process FILTER_LANCEOTRON {
+    tag "$meta.id"
+    label 'process_low'
+
+    input:
+    tuple val(meta), path(peaks)
+    val threshold
+
+    output:
+    tuple val(meta), path("*_filtered.bed"), emit: filtered_peaks
+
+    script:
+    """
+    #!/usr/bin/env python3
+    import sys
+
+    with open("${peaks}", "r") as f:
+        lines = f.readlines()
+
+    if not lines:
+        with open("${meta.id}_lanceotron_filtered.bed", "w") as out:
+            pass
+        sys.exit(0)
+
+    header = lines[0].strip().split("\\t")
+    
+    idx = -1
+    for i, col in enumerate(header):
+        clean_col = col.lower().replace(" ", "_")
+        if "overall_peak_score" in clean_col:
+            idx = i
+            break
+
+    if idx == -1:
+        with open("${meta.id}_lanceotron_filtered.bed", "w") as out:
+            out.writelines(lines)
+    else:
+        out_lines = [lines[0]]
+        for line in lines[1:]:
+            parts = line.strip().split("\\t")
+            if len(parts) > idx:
+                try:
+                    score = float(parts[idx])
+                    if score > float(${threshold}):
+                        out_lines.append(line)
+                except ValueError:
+                    continue
+                    
+        with open("${meta.id}_lanceotron_filtered.bed", "w") as out:
+            out.writelines(out_lines)
+    """
+}
