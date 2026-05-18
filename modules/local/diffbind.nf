@@ -51,7 +51,7 @@ process DIFFBIND {
         "</div>"
     ), file="diffbind_corr_mqc.html")
 
-    db_obj <- dba.count(db_obj, bParallel=TRUE)
+    db_obj <- dba.count(db_obj, bParallel=FALSE, bUseSummarizeOverlaps=TRUE)
 
     try({
         cor_matrix <- dba.overlap(db_obj, mode=DBA_OL_COR)
