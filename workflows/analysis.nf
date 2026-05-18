@@ -124,7 +124,7 @@ workflow ATAC_CHIP_PIPELINE {
         ch_broad_peaks  = MACS3_ATAC_BROAD.out.peaks
         ch_narrow_counts_mqc = MACS3_ATAC_NARROW.out.count_narrow
         ch_broad_counts_mqc  = MACS3_ATAC_BROAD.out.count_broad
-        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.xls.map{ it[1] }.mix(MACS3_ATAC_BROAD.out.xls.map{ it[1] })
+        ch_macs_logs_mqc = MACS3_ATAC_NARROW.out.peaks.map{ it[1] }.mix(MACS3_ATAC_BROAD.out.peaks.map{ it[1] })
     } else {
         ch_ip_m3 = ch_bams_branched.ip.map { meta, bam, bai -> [ meta.control, meta, bam ] }
         ch_ct_m3 = ch_bams_branched.control.map { meta, bam, bai -> [ meta.id, bam ] }
