@@ -15,6 +15,7 @@ process DIFFBIND {
     path "*_mqc.html"                  , emit: mqc_html, optional: true
     path "diffbind_correlation_mqc.txt", emit: mqc_txt, optional: true
     path "*.png"                       , emit: png, optional: true
+    path "diffbind_sig_peaks.bed"      , emit: sig_bed, optional: true // <-- NUOVO OUTPUT PER PROFILEPLYR
     path "versions.yml"                , emit: versions
 
     script:
@@ -22,6 +23,11 @@ process DIFFBIND {
     #!/usr/bin/env Rscript
     library(DiffBind)
     library(base64enc)
+    library(BiocParallel)
+
+    allocated_cores <- as.numeric("${task.cpus}")
+    register(MulticoreParam(workers = allocated_cores, progressbar = TRUE))
+    options(cores = allocated_cores)
 
     samples <- read.csv("${samplesheet}")
     samples\$bamReads <- basename(as.character(samples\$bamReads))
@@ -51,7 +57,7 @@ process DIFFBIND {
         "</div>"
     ), file="diffbind_corr_mqc.html")
 
-    db_obj <- dba.count(db_obj, bParallel=FALSE, bUseSummarizeOverlaps=TRUE)
+    db_obj <- dba.count(db_obj, bParallel=TRUE, bUseSummarizeOverlaps=TRUE)
 
     try({
         cor_matrix <- dba.overlap(db_obj, mode=DBA_OL_COR)
@@ -64,9 +70,22 @@ process DIFFBIND {
         db_obj <- dba.analyze(db_obj)
     }, silent=TRUE)
 
+    # Inizializziamo un file vuoto di sicurezza se non ci fossero picchi significativi
+    file.create("diffbind_sig_peaks.bed")
+
     if (!inherits(analysis_status, "try-error") && !is.null(db_obj\$contrasts)) {
         res_db <- dba.report(db_obj)
         write.csv(as.data.frame(res_db), "diff_bind_results.csv")
+
+        # ESTRAZIONE E SCRITTURA DELLA MATRICE FILTRATA IN BED PER PROFILEPLYR
+        if(length(res_db) > 0) {
+            df_sig <- as.data.frame(res_db)
+            # Creiamo un formato BED standard (chr, start, end, name, score)
+            bed_sig <- df_sig[, c("seqnames", "start", "end")]
+            bed_sig\$name <- paste0("DB_site_", 1:nrow(bed_sig))
+            bed_sig\$score <- df_sig\$FDR
+            write.table(bed_sig, "diffbind_sig_peaks.bed", sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
+        }
 
         png("diffbind_pca.png", width=1000, height=800, res=150)
         dba.plotPCA(db_obj, attributes=contrast_category, label=DBA_ID)
